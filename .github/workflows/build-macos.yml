@@ -1,0 +1,68 @@
+name: Build macOS App
+
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:   # 允许手动触发
+
+jobs:
+  build:
+    runs-on: macos-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.12'
+
+    - name: Install dependencies
+      run: |
+        pip install pycryptodome pillow pyinstaller
+
+    - name: Convert icon.ico to icon.icns (if present)
+      run: |
+        if [ -f icon.ico ]; then
+          python3 -c "
+          from PIL import Image
+          img = Image.open('icon.ico')
+          img.save('icon.png')
+          "
+          mkdir icon.iconset
+          sips -z 16 16     icon.png --out icon.iconset/icon_16x16.png
+          sips -z 32 32     icon.png --out icon.iconset/icon_16x16@2x.png
+          sips -z 32 32     icon.png --out icon.iconset/icon_32x32.png
+          sips -z 64 64     icon.png --out icon.iconset/icon_32x32@2x.png
+          sips -z 128 128   icon.png --out icon.iconset/icon_128x128.png
+          sips -z 256 256   icon.png --out icon.iconset/icon_128x128@2x.png
+          sips -z 256 256   icon.png --out icon.iconset/icon_256x256.png
+          sips -z 512 512   icon.png --out icon.iconset/icon_256x256@2x.png
+          sips -z 512 512   icon.png --out icon.iconset/icon_512x512.png
+          sips -z 1024 1024 icon.png --out icon.iconset/icon_512x512@2x.png
+          iconutil -c icns icon.iconset -o icon.icns
+          echo "ICNS generated"
+        fi
+
+    - name: Build app bundle with PyInstaller
+      run: |
+        # 如果有 poems.json，可打包进资源（注意 macOS 分隔符为 : ）
+        if [ -f poems.json ]; then
+          pyinstaller --windowed --name "空结" --icon=icon.icns --add-data "poems.json:." main.py
+        else
+          pyinstaller --windowed --name "空结" --icon=icon.icns main.py
+        fi
+
+    - name: Create DMG (optional)
+      run: |
+        # 将 .app 打包为 .dmg 便于分发
+        hdiutil create -volname "空结" -srcfolder dist/空结.app -ov -format UDZO "空结.dmg"
+
+    - name: Upload macOS App
+      uses: actions/upload-artifact@v4
+      with:
+        name: 空结-macOS
+        path: |
+          dist/空结.app
+          空结.dmg
